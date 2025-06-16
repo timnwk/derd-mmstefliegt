@@ -16,7 +16,7 @@ Dieses Projekt ist ein browserbasiertes Spiel, das in Livestreams eingebunden we
 
 * Eine Lobby für Mitspieler zu erstellen
 * Fragenrunden zu moderieren
-* Zuschauer im Stream abstimmen zu lassen
+* Einstellung der Rundenlänge
 * Kamerabilder der Mitspieler (per VDO.Ninja) im OBS-Overlay einzublenden
 
 ---
