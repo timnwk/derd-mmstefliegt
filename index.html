@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Der Dümmste Fliegt - Das Spiel (Supabase)</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts for a clean look -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+    
+    <!-- Tone.js for sound effects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+
+    <!-- Supabase Client Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        /* Custom Styles */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827;
+            color: #F9FAFB;
+        }
+        
+        * {
+            transition: all 0.3s ease-in-out;
+        }
+
+        .player-card {
+            border: 4px solid #4B5563;
+            transition: border-color 0.2s, box-shadow 0.2s, transform 0.3s;
+            overflow: hidden;
+        }
+        
+        .player-turn {
+            border-color: #FBBF24; /* amber-400 */
+            box-shadow: 0 0 25px #FBBF24;
+            transform: scale(1.03);
+        }
+
+        /* Eigener Flash-Effekt für Herz-Änderungen */
+        .flash-heart-change {
+            animation: flash-heart-anim 0.7s ease-out;
+        }
+        @keyframes flash-heart-anim {
+            0%, 100% { border-color: #4B5563; box-shadow: none; }
+            50% { border-color: #F43F5E; box-shadow: 0 0 25px #F43F5E; }
+        }
+        
+        .heart {
+            color: #F43F5E; display: inline-block; text-shadow: 0 0 8px #f43f5e;
+        }
+        .heart-lost {
+            color: #4B5563; text-shadow: none; animation: heart-lost-anim 0.5s ease;
+        }
+        @keyframes heart-lost-anim {
+            0% { transform: scale(1.5); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Animierter Hintergrund für das Overlay */
+        .overlay-body { 
+            overflow: hidden; 
+            background: radial-gradient(ellipse at center, #1f2937 0%, #111827 100%);
+            position: relative;
+        }
+
+        .overlay-body::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: gridDriftVertical 20s linear infinite;
+            z-index: 0;
+        }
+
+        .overlay-body::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 50% 100%, rgba(255, 255, 255, 0.05), transparent 60%);
+            z-index: 0;
+        }
+
+        @keyframes gridDriftVertical {
+            0% { background-position: 0 0; }
+            100% { background-position: 0 200px; }
+        }
+
+        /* "Glow"-Effekt für den Timer-Alarm */
+        .timer-ended-glow::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            z-index: 999;
+            pointer-events: none;
+            animation: glow-anim 1s 2;
+        }
+
+        @keyframes glow-anim {
+            from {
+                box-shadow: inset 0 0 0px 0px rgba(239, 68, 68, 0);
+            }
+            to {
+                box-shadow: inset 0 0 50px 25px rgba(239, 68, 68, 0.7);
+            }
+        }
+
+        .vote-tag {
+            background-color: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px); padding: 2px 8px;
+            border-radius: 9999px; font-size: 0.8rem; font-weight: bold; color: white; border: 1px solid #4B5563;
+        }
+
+        .camera-placeholder {
+            width: 100%; aspect-ratio: 16 / 9; background-color: #374151;
+            display: flex; align-items: center; justify-content: center; color: #9CA3AF;
+        }
+        .camera-placeholder iframe {
+            width: 100%; height: 100%; border: none;
+        }
+
+        .overlay-logo {
+            position: absolute;
+            top: 3vh;
+            left: 50%;
+            transform: translateX(-50%);
+            width: clamp(150px, 18vw, 350px);
+            z-index: 50;
+            animation: float-anim 4s ease-in-out infinite;
+        }
+
+        @keyframes float-anim {
+            0%, 100% { transform: translateX(-50%) translateY(0px); }
+            50% { transform: translateX(-50%) translateY(-10px); }
+        }
+        
+        #overlay-timer {
+            position: absolute;
+            top: 3vh;
+            right: 3vw;
+            font-size: clamp(1.5rem, 3vw, 4rem);
+            font-weight: 900;
+            color: white;
+            background-color: rgba(0,0,0,0.5);
+            padding: 0.5rem 1.5rem;
+            border-radius: 0.75rem;
+            font-family: 'Inter', sans-serif;
+            z-index: 50;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div id="app" class="min-h-screen">
+        <!-- App content will be rendered here by JavaScript -->
+    </div>
+
+    <script>
+        // --- Supabase Configuration ---
+        const SUPABASE_URL = 'https://hpsrsrzptdkuhhifmjhx.supabase.co'; 
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhwc3JzcnpwdGRrdWhoaWZtamh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk2NzM3MDYsImV4cCI6MjA2NTI0OTcwNn0.TpmnNFYMVvWM-9R7kY-KGB0iAAdg4CaZcvQuT8jU-pA';
+
+
+        const { createClient } = supabase;
+        const dbClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let currentUser = null;
+        let currentGameId = null; 
+        let gameChannel = null;
+        let lastGameState = {}; 
+        let isAudioReady = false;
+        let timerInterval = null;
+
+        const questions = [
+            { q: "Wie viele Monde hat der Mars?", a: "Zwei (Phobos und Deimos)" }, { q: "Was ist die Hauptstadt von Australien?", a: "Canberra" }, { q: "Wer malte die Mona Lisa?", a: "Leonardo da Vinci" }, { q: "Was ist das größte Säugetier der Welt?", a: "Der Blauwal" }, { q: "In welchem Jahr fiel die Berliner Mauer?", a: "1989" }, { q: "Was ist die chemische Formel für Wasser?", a: "H₂O" }, { q: "Wie viele Spieler hat eine Fußballmannschaft auf dem Feld?", a: "Elf" }, { q: "Wer schrieb 'Romeo und Julia'?", a: "William Shakespeare" }, { q: "Was ist der höchste Berg der Welt?", a: "Mount Everest" }, { q: "Wie viele Kontinente gibt es?", a: "Sieben" }, { q: "Welches Land hat die Form eines Stiefels?", a: "Italien" }, { q: "Wie viele Tasten hat ein Standardklavier?", a: "88" }, { q: "Welcher Ozean ist der größte?", a: "Der Pazifische Ozean" }, { q: "Wie viele Herzen hat ein Oktopus?", a: "Drei" }, { q: "Was ist die meistgesprochene Sprache der Welt?", a: "Mandarin-Chinesisch" }, { q: "Wer erfand die Glühbirne?", a: "Thomas Edison (hat sie zur Marktreife entwickelt)" }, { q: "Wie viele Bundesländer hat Deutschland?", a: "16" }, { q: "Welches Tier ist auf dem Wappen von Berlin zu sehen?", a: "Ein Bär" }, { q: "Wie viele Felder hat ein Schachbrett?", a: "64" }, { q: "Wie hoch ist der Eiffelturm in Metern (ohne Antennen)?", a: "ca. 300 Meter" }, { q: "Wie schnell kann ein Gepard rennen (in km/h)?", a: "ca. 100-120 km/h" }, { q: "Wie viele Liter Bier werden in Deutschland pro Kopf und Jahr getrunken?", a: "ca. 100 Liter" }, { q: "Wie viele Zeitzonen gibt es in Russland?", a: "Elf" }, { q: "Was ist das einzige Säugetier, das fliegen kann?", a: "Die Fledermaus" }, { q: "Wer komponierte die 'Mondscheinsonate'?", a: "Ludwig van Beethoven" }, { q: "Welcher Künstler schnitt sich ein Ohr ab?", a: "Vincent van Gogh" }, { q: "Wie viele Farben hat ein Regenbogen?", a: "Sieben" }, { q: "Welches Instrument hat 6 Saiten und wird gezupft?", a: "Gitarre" }, { q: "Wie nennt man die männliche Ente?", a: "Erpel" },
+        ];
+        
+        const sounds = {
+            voteReveal: () => isAudioReady && new Tone.PluckSynth().toDestination().triggerAttack("G4", Tone.now()),
+            heartLost: () => isAudioReady && new Tone.MembraneSynth().toDestination().triggerAttackRelease("C2", "4n", Tone.now()),
+            timerEnd: () => isAudioReady && new Tone.Synth({ volume: -12, oscillator: { type: 'square' }, envelope: { attack: 0.01, decay: 0.4, sustain: 0, release: 0.1 } }).toDestination().triggerAttackRelease("A5", "8n", Tone.now())
+        };
+
+        // --- Core Logic ---
+
+        async function initializeAppLogic() {
+            try {
+                const { data: { session } } = await dbClient.auth.getSession();
+                if (session) currentUser = session.user;
+                else {
+                    const { data, error } = await dbClient.auth.signInAnonymously();
+                    if (error) throw error;
+                    currentUser = data.user;
+                }
+            } catch (error) {
+                if (error.message?.includes("Anonymous sign-ins are disabled")) renderErrorPage("Anonyme Logins deaktiviert", "Bitte aktiviere 'Anonymous sign-ins' in deinen Supabase Authentication Provider-Einstellungen.");
+                else renderErrorPage("Authentifizierungsfehler", "Konnte keine Sitzung starten.");
+                return;
+            }
+            mainRouter();
+        }
+        
+        function mainRouter() {
+            if (timerInterval) clearInterval(timerInterval);
+            const appDiv = document.getElementById('app');
+            appDiv.className = 'min-h-screen';
+
+            const params = new URLSearchParams(window.location.search);
+            const view = params.get('view');
+            const newGameId = params.get('game');
+
+            if (gameChannel && (currentGameId !== newGameId || !view)) {
+                dbClient.removeChannel(gameChannel);
+                gameChannel = null;
+            }
+            currentGameId = newGameId;
+
+            const viewMap = { host: renderHostView, player: renderPlayerView, overlay: renderOverlayView };
+
+            if (viewMap[view] && currentGameId) {
+                document.body.classList.toggle('overlay-body', view === 'overlay');
+                if (view === 'overlay') {
+                    appDiv.classList.add('p-8', 'box-border', 'flex', 'items-center', 'justify-center', 'relative', 'z-10');
+                    // Audio in OBS wird durch "Control audio via OBS" aktiviert.
+                    // Für den Fall, dass es in einem normalen Browser geöffnet wird, starten wir es beim ersten Klick.
+                    document.body.addEventListener('click', async () => {
+                        if (!isAudioReady) {
+                            await Tone.start();
+                            isAudioReady = true;
+                            console.log("Audio context started by user interaction.");
+                        }
+                    }, { once: true });
+                } else {
+                    appDiv.classList.add('p-4', 'sm:p-6', 'md:p-8');
+                }
+                subscribeToGameChannel(viewMap[view]);
+            } else {
+                appDiv.classList.add('p-4', 'sm:p-6', 'md:p-8');
+                renderLandingPage();
+            }
+        }
+
+        async function subscribeToGameChannel(renderFunction) {
+            if (!currentGameId) return;
+            const { data, error } = await dbClient.from('games').select('id, game_data').eq('lobby_code', currentGameId).single();
+            if (error || !data) { renderErrorPage("Spiel nicht gefunden", "Das Spiel mit diesem Code existiert nicht."); return; }
+            
+            const gameUUID = data.id;
+            const initialGameData = data.game_data;
+            renderFunction(initialGameData);
+            handleSoundTriggers(initialGameData, lastGameState);
+            lastGameState = initialGameData;
+
+            if (gameChannel) return;
+
+            gameChannel = dbClient.channel(`game-updates-${gameUUID}`);
+            gameChannel.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `id=eq.${gameUUID}` }, 
+                (payload) => {
+                    const gameData = payload.new.game_data;
+                    renderFunction(gameData);
+                    handleSoundTriggers(gameData, lastGameState);
+                    lastGameState = gameData;
+                }
+            ).subscribe();
+        }
+        
+        async function getFreshGameState() {
+            if (!currentGameId) return null;
+            const { data, error } = await dbClient.from('games').select('game_data').eq('lobby_code', currentGameId).single();
+            if (error) { console.error("Error fetching fresh game state:", error); return null; }
+            return data.game_data;
+        }
+
+        async function updateGameStateInDb(newGameData) {
+            const { error } = await dbClient.from('games').update({ game_data: newGameData }).eq('lobby_code', currentGameId);
+            if (error) console.error("Error updating game state:", error);
+        }
+
+        function handleSoundTriggers(gameData, oldGameData) {
+            if (Object.keys(oldGameData).length === 0 || !isAudioReady) return;
+            if (gameData.gameState === 'RESULTS' && oldGameData.gameState !== 'RESULTS') sounds.voteReveal();
+            
+            const oldPlayers = oldGameData.players || {};
+            Object.values(gameData.players || {}).forEach(player => {
+                const oldPlayerState = Object.values(oldPlayers).find(p => p.id === player.id);
+                if (oldPlayerState && player.hearts !== oldPlayerState.hearts) {
+                    sounds.heartLost();
+                }
+            });
+        }
+        
+        // --- Render Functions ---
+
+        function renderLandingPage() {
+            document.getElementById('app').innerHTML = `<div class="flex flex-col items-center justify-center min-h-screen text-center"><img src="logo.svg" alt="Der Dümmste Fliegt Logo" class="w-48 mb-8"><h1 class="text-5xl md:text-7xl font-black text-white mb-4">Der Dümmste Fliegt</h1><p class="text-xl text-gray-300 mb-8 max-w-2xl">Das interaktive Spiel für deinen Livestream. Erstelle eine Lobby und lade deine Freunde ein.</p><button id="create-game-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-8 rounded-lg text-2xl shadow-lg transform hover:scale-105">Neue Lobby erstellen</button></div>`;
+            document.getElementById('create-game-btn').addEventListener('click', createNewGame);
+        }
+
+        function renderHostView(gameData) {
+            const appDiv = document.getElementById('app');
+            const playersArray = Object.entries(gameData.players || {}).filter(([, p]) => !p.isEliminated);
+            const roundTimeMinutes = Math.floor((gameData.settings.roundTime || 300) / 60);
+            const roundTimeSeconds = (gameData.settings.roundTime || 300) % 60;
+            const isHostPlayer = !!gameData.players[currentUser.id];
+            
+            const hostJoinSection = !isHostPlayer ? `<div class="bg-gray-800 p-6 rounded-lg space-y-4"><h2 class="text-2xl font-bold">Spiel beitreten (als Host)</h2><p class="text-gray-300">Füge dich selbst als Spieler hinzu, um im Overlay zu erscheinen.</p><div class="flex gap-2"><input type="text" id="host-name-input" placeholder="Dein Host-Name" class="bg-gray-700 border border-gray-600 text-white rounded-md p-3 text-lg flex-grow"><button id="host-join-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-md text-lg">Als Host beitreten</button></div></div>` : '';
+            const resolveButton = gameData.gameState === 'QUESTIONS' && gameData.currentPlayerTurn ? `<button id="resolve-btn" class="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg text-lg">Antwort auflösen</button>` : '';
+            const nextPlayerButton = gameData.gameState === 'QUESTIONS' ? `<button id="next-player-btn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-lg">Nächster Spieler & Frage</button>` : '';
+
+            appDiv.innerHTML = `<div class="space-y-8"><div class="flex items-center gap-4"><img src="logo.svg" alt="Logo" class="w-16 h-16"><div><h1 class="text-4xl font-bold">Host Dashboard</h1><p class="text-gray-400">Lobby-Code: <span class="font-mono text-yellow-300 text-lg">${currentGameId}</span></p></div></div>${hostJoinSection}<details class="bg-gray-800 p-4 rounded-lg cursor-pointer"><summary class="text-xl font-bold">VDO.Ninja Anleitung (WICHTIG)</summary><div class="mt-4 space-y-2 text-gray-300"><p>Um die Kameras deiner Mitspieler im OBS-Overlay anzuzeigen, musst du deren individuelle Links von VDO.Ninja hier eintragen.</p><p>1. Erstelle einen Gruppenraum auf <a href="https://vdo.ninja" target="_blank" class="text-blue-400 underline">vdo.ninja</a>.</p><p>2. Lade deine Mitspieler mit dem generierten Link ein.</p><p>3. Sobald ein Spieler beitritt, klicke auf das "Link"-Symbol bei seiner Kamera und wähle <strong class="text-yellow-300">"Copy the solo view link"</strong>.</p><p>4. Füge diesen Solo-Link in das entsprechende Feld des Spielers hier im Dashboard ein und klicke auf "✓", um zu speichern.</p><p class="text-red-400 font-bold mt-2">Wichtig: Benutze NICHT den allgemeinen Einladungslink für den Raum, sondern immer den individuellen Solo-Link jedes Gastes!</p></div></details>${gameData.gameState === 'QUESTIONS' && gameData.currentQuestion ? `<div class="bg-gray-800 p-6 rounded-lg space-y-4"><div><h3 class="text-lg font-semibold text-gray-400">Aktuelle Frage:</h3><p class="text-2xl font-bold text-white mt-1">${gameData.currentQuestion.q}</p></div><div class="border-t border-gray-700 pt-4"><h3 class="text-lg font-semibold text-gray-400">Korrekte Antwort:</h3><p class="text-xl font-bold text-green-400 mt-1">${gameData.currentQuestion.a}</p></div></div>` : ''}<div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div class="bg-gray-800 p-6 rounded-lg space-y-4"><h2 class="text-2xl font-bold">Links zum Teilen</h2>${renderCopyableLink("Spieler-Einladung", `${window.location.origin}${window.location.pathname}?view=player&game=${currentGameId}`)}${renderCopyableLink("OBS Overlay", `${window.location.origin}${window.location.pathname}?view=overlay&game=${currentGameId}`)}</div><div class="bg-gray-800 p-6 rounded-lg space-y-4"><h2 class="text-2xl font-bold">Spielsteuerung</h2><div class="flex items-end gap-4"><div class="flex-grow"><label class="block text-sm font-medium text-gray-300">Runden-Timer</label><div class="flex gap-2"><input type="number" id="round-time-min" class="bg-gray-700 border border-gray-600 text-white rounded-md p-2 w-full" value="${roundTimeMinutes}" min="0"><span class="text-2xl">:</span><input type="number" id="round-time-sec" class="bg-gray-700 border border-gray-600 text-white rounded-md p-2 w-full" value="${roundTimeSeconds}" min="0" max="59"></div></div><button id="set-time-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Setzen</button></div><div class="pt-4 flex flex-wrap gap-4">${gameData.gameState === 'LOBBY' || gameData.gameState === 'RESULTS' ? `<button id="start-round-btn" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-lg">Fragerunde starten</button>` : ''}${resolveButton}${nextPlayerButton}${gameData.gameState === 'QUESTIONS' ? `<button id="start-voting-btn" class="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg text-lg">Voting starten</button>` : ''}${gameData.gameState === 'VOTING' ? `<button id="close-voting-btn" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-lg">Voting schließen & Auswerten</button>` : ''}</div>${gameData.gameState === 'QUESTIONS' ? `<div id="timer-display" class="text-center text-6xl font-mono font-bold py-4"></div>` : ''}</div></div><div><h2 class="text-3xl font-bold mb-4">Spieler (${playersArray.length})</h2><div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">${playersArray.map(([id, player]) => renderHostPlayerCard(id, player, gameData)).join('')}</div></div></div>`;
+            attachHostEventListeners();
+            if (gameData.gameState === 'QUESTIONS' && gameData.roundEndTime) {
+                setupTimer(gameData.roundEndTime);
+            }
+        }
+        
+        function renderPlayerView(gameData) {
+            const appDiv = document.getElementById('app');
+            const myPlayerId = currentUser.id;
+            const myPlayerData = gameData.players[myPlayerId];
+            if (!myPlayerData) {
+                appDiv.innerHTML = `<div class="flex flex-col items-center justify-center min-h-screen text-center"><h1 class="text-4xl font-bold mb-4">Lobby beitreten</h1><p class="text-gray-300 mb-6">Gib deinen Spielernamen ein, um teilzunehmen.</p><div class="flex gap-2"><input type="text" id="player-name-input" placeholder="Dein Name" class="bg-gray-700 border border-gray-600 text-white rounded-md p-3 text-lg w-64"><button id="join-game-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-md text-lg">Beitreten</button></div></div>`;
+                document.getElementById('join-game-btn').addEventListener('click', () => joinGame(false));
+                return;
+            }
+            if (myPlayerData.isEliminated) {
+                appDiv.innerHTML = `<div class="flex flex-col items-center justify-center min-h-screen text-center"><h1 class="text-6xl font-black text-red-500 mb-4">Du bist ausgeschieden!</h1><p class="text-xl text-gray-300">Danke fürs Mitspielen!</p></div>`;
+                return;
+            }
+            let content = '';
+            switch(gameData.gameState) {
+                case 'LOBBY': content = `<h1 class="text-5xl font-bold">Warte auf Spielstart...</h1>`; break;
+                case 'QUESTIONS':
+                    if (gameData.currentPlayerTurn === myPlayerId) content = `<h1 class="text-5xl font-bold text-yellow-300 animate-pulse">Du bist dran!</h1>`;
+                    else if (gameData.currentPlayerTurn) content = `<h1 class="text-5xl font-bold">${gameData.players[gameData.currentPlayerTurn]?.name || 'Jemand'} ist dran...</h1>`;
+                    else content = `<h1 class="text-5xl font-bold">Fragerunde!</h1>`;
+                    break;
+                case 'VOTING':
+                    const otherPlayers = Object.entries(gameData.players).filter(([id, p]) => id !== myPlayerId && !p.isEliminated && !p.isHost);
+                    const alreadyVoted = gameData.votes && gameData.votes[myPlayerId];
+                    if (alreadyVoted) content = `<h1 class="text-4xl font-bold">Du hast für ${gameData.players[gameData.votes[myPlayerId]]?.name || 'jemanden'} gestimmt.</h1>`;
+                    else content = `<h1 class="text-4xl font-bold mb-6">Wer fliegt raus?</h1><div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">${otherPlayers.map(([id, player]) => `<button class="vote-btn bg-gray-800 hover:bg-indigo-600 p-6 rounded-lg text-xl font-bold" data-player-id="${id}">${player.name}</button>`).join('')}</div>`;
+                    break;
+                case 'RESULTS': content = `<h1 class="text-5xl font-bold">Auswertung!</h1>`; break;
+            }
+            appDiv.innerHTML = `<div class="flex flex-col items-center justify-center min-h-screen text-center">${content}</div>`;
+            attachPlayerEventListeners();
+        }
+
+        function renderOverlayView(gameData) {
+            const appDiv = document.getElementById('app');
+            let gridContainer = document.getElementById('overlay-grid');
+            let logo = document.getElementById('overlay-logo');
+            let timerEl = document.getElementById('overlay-timer');
+
+            if (!gridContainer) {
+                appDiv.innerHTML = '';
+                logo = document.createElement('img');
+                logo.id = 'overlay-logo'; logo.src = 'logo.svg'; logo.alt = 'Logo'; logo.className = 'overlay-logo';
+                appDiv.appendChild(logo);
+                
+                timerEl = document.createElement('div');
+                timerEl.id = 'overlay-timer';
+                appDiv.appendChild(timerEl);
+
+                gridContainer = document.createElement('div');
+                gridContainer.id = 'overlay-grid';
+                gridContainer.className = 'grid w-full h-full gap-4';
+                gridContainer.style.gridTemplateColumns = `repeat(auto-fit, minmax(300px, 1fr))`;
+                gridContainer.style.alignContent = 'center';
+                appDiv.appendChild(gridContainer);
+            }
+            
+            // Timer Update
+            if(gameData.gameState === 'QUESTIONS' && gameData.roundEndTime) {
+                timerEl.style.display = 'block';
+                setupTimer(gameData.roundEndTime, 'overlay-timer', gameData.timerAlarmPlayed);
+            } else {
+                timerEl.style.display = 'none';
+            }
+
+            let questionBox = document.getElementById('question-box-wrapper');
+            let questionHtml = '';
+            if (gameData.gameState === 'QUESTIONS' && gameData.currentQuestion) {
+                const textToShow = gameData.showAnswerInOverlay ? gameData.currentQuestion.a : gameData.currentQuestion.q;
+                const label = gameData.showAnswerInOverlay ? "Richtige Antwort:" : "";
+                const labelColor = gameData.showAnswerInOverlay ? "text-green-400" : "text-yellow-300";
+                questionHtml = `<div class="bg-black bg-opacity-70 p-4 rounded-xl border border-gray-700">${label ? `<h3 class="text-xl text-center font-semibold text-gray-400">${label}</h3>` : ''}<h2 class="text-3xl text-center font-bold ${labelColor}">${textToShow}</h2></div>`;
+            } else if (gameData.gameState === 'VOTING') {
+                 questionHtml = `<div class="bg-black bg-opacity-70 p-4 rounded-xl border border-gray-700"><h2 class="text-3xl text-center font-bold text-yellow-300">ABSTIMMUNG</h2></div>`;
+            }
+
+            if (questionHtml) {
+                if (!questionBox) {
+                    questionBox = document.createElement('div');
+                    questionBox.id = 'question-box-wrapper';
+                    questionBox.className = 'col-span-full';
+                    gridContainer.prepend(questionBox);
+                }
+                if(questionBox.innerHTML !== questionHtml) {
+                    questionBox.innerHTML = questionHtml;
+                }
+            } else if (questionBox) {
+                questionBox.remove();
+            }
+
+            const playersArray = Object.values(gameData.players || {}).filter(p => !p.isEliminated).sort((a, b) => (a.joinOrder || 0) - (b.joinOrder || 0));
+            const activePlayerIds = playersArray.map(p => p.id);
+            const displayedPlayerElements = gridContainer.querySelectorAll('.player-card');
+
+            displayedPlayerElements.forEach(card => {
+                if (!activePlayerIds.includes(card.dataset.playerId)) card.remove();
+            });
+
+            playersArray.forEach(player => {
+                let card = document.getElementById(`player-card-${player.id}`);
+                const oldPlayerState = lastGameState.players?.[player.id];
+                
+                if (!card) {
+                    gridContainer.insertAdjacentHTML('beforeend', renderOverlayPlayerCard(player.id, player, gameData));
+                } else {
+                    if (player.id === gameData.currentPlayerTurn && !player.isHost) card.classList.add('player-turn');
+                    else card.classList.remove('player-turn');
+
+                    if (oldPlayerState && player.hearts !== oldPlayerState.hearts) {
+                        card.classList.add('flash-heart-change');
+                        setTimeout(() => card.classList.remove('flash-heart-change'), 700);
+                    }
+
+                    const heartsContainer = card.querySelector('.hearts-container');
+                    if (player.isHost) {
+                        if (heartsContainer.innerHTML !== `<p class="font-bold text-yellow-400 text-xl">Host</p>`) heartsContainer.innerHTML = `<p class="font-bold text-yellow-400 text-xl">Host</p>`;
+                    } else {
+                        const heartsHtml = Array.from({ length: 3 }, (_, i) => `<span class="heart ${i < player.hearts ? '' : 'heart-lost'} text-3xl">♥</span>`).join('');
+                        if (heartsContainer.innerHTML !== heartsHtml) heartsContainer.innerHTML = heartsHtml;
+                    }
+                    
+                    const voteTagsContainer = card.querySelector('.vote-tags-container');
+                    let voteTagsHtml = '';
+                    if (gameData.gameState === 'RESULTS' && gameData.voteResults?.[player.id]) voteTagsHtml = gameData.voteResults[player.id].map(voterId => `<div class="vote-tag">${gameData.players[voterId]?.name || '?'}</div>`).join('');
+                    if (voteTagsContainer.innerHTML !== voteTagsHtml) voteTagsContainer.innerHTML = voteTagsHtml;
+                    
+                    const iframe = card.querySelector('iframe');
+                    if (player.vdoNinjaLink && (!iframe || iframe.src !== player.vdoNinjaLink)) card.querySelector('.camera-placeholder').innerHTML = `<iframe src="${player.vdoNinjaLink}" allow="camera;microphone;autoplay;fullscreen"></iframe>`;
+                    else if (!player.vdoNinjaLink && iframe) card.querySelector('.camera-placeholder').innerHTML = `<span class="text-2xl font-bold">Kamera</span>`;
+                }
+            });
+        }
+        
+        function renderErrorPage(title, message) {
+            document.getElementById('app').innerHTML = `<div class="flex flex-col items-center justify-center min-h-screen text-center"><h1 class="text-5xl font-black text-red-500 mb-4">${title}</h1><p class="text-xl text-gray-300 max-w-lg">${message}</p><a href="${window.location.origin}${window.location.pathname}" class="mt-8 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg">Zurück zur Startseite</a></div>`;
+        }
+
+        function renderCopyableLink(label, link) {
+            return `<div><label class="block text-sm font-medium text-gray-300">${label}</label><div class="flex mt-1"><input type="text" readonly value="${link}" class="flex-grow bg-gray-700 border border-gray-600 text-gray-300 rounded-l-md p-2"><button class="copy-btn bg-indigo-600 hover:bg-indigo-700 text-white font-bold p-2 rounded-r-md" data-link="${link}">Kopieren</button></div></div>`;
+        }
+
+        function renderHostPlayerCard(id, player, gameData) {
+            const isTurn = id === gameData.currentPlayerTurn;
+            const turnClass = isTurn ? 'ring-2 ring-yellow-400 shadow-lg shadow-yellow-400/20' : '';
+            
+            const heartControls = player.isHost ? `<p class="text-sm text-yellow-400 font-bold">HOST</p>` : `<div class="flex items-center gap-2"><button class="adjust-heart-btn bg-red-600 w-8 h-8 rounded-full font-bold flex items-center justify-center" data-player-id="${id}" data-amount="-1">-</button><p class="text-sm text-gray-400">Herzen: ${player.hearts}</p><button class="adjust-heart-btn bg-green-600 w-8 h-8 rounded-full font-bold flex items-center justify-center" data-player-id="${id}" data-amount="1">+</button></div>`;
+            
+            return `<div class="bg-gray-800 p-4 rounded-lg flex flex-col gap-4 ${turnClass}"><div class="flex items-center justify-between"><p class="text-xl font-bold">${player.name}</p>${heartControls}</div><div class="flex items-center gap-2 mt-2"><input type="text" id="vdo-link-${id}" class="flex-grow bg-gray-700 border border-gray-600 text-white rounded-l-md p-2 text-sm" placeholder="VDO.Ninja Solo-Link..." value="${player.vdoNinjaLink || ''}"><button class="save-vdo-btn bg-gray-600 hover:bg-gray-700 text-white font-bold p-2 rounded-r-md" data-player-id="${id}">✓</button></div></div>`;
+        }
+        
+        function renderOverlayPlayerCard(id, player, gameData) {
+            const isTurn = id === gameData.currentPlayerTurn;
+            const turnClass = isTurn && !player.isHost ? 'player-turn' : '';
+            
+            const heartsHtml = player.isHost ? `<p class="font-bold text-yellow-400 text-xl px-2">Host</p>` : Array.from({ length: 3 }, (_, i) => `<span class="heart ${i < player.hearts ? '' : 'heart-lost'} text-3xl">♥</span>`).join('');
+
+            let voteTagsHtml = '';
+            if (gameData.gameState === 'RESULTS' && gameData.voteResults?.[id]) voteTagsHtml = gameData.voteResults[id].map(voterId => `<div class="vote-tag">${gameData.players[voterId]?.name || '?'}</div>`).join('');
+            const cameraContent = player.vdoNinjaLink ? `<iframe src="${player.vdoNinjaLink}" allow="camera;microphone;autoplay;fullscreen"></iframe>` : `<span class="text-2xl font-bold">Kamera</span>`;
+            return `<div id="player-card-${id}" data-player-id="${id}" class="player-card bg-gray-800 rounded-2xl flex flex-col relative ${turnClass}"><div class="bg-gray-900 px-4 py-2 flex justify-between items-center rounded-t-2xl"><p class="text-2xl font-bold truncate">${player.name}</p><div class="flex gap-1 items-center hearts-container">${heartsHtml}</div></div><div class="camera-placeholder">${cameraContent}</div><div class="absolute top-2 left-2 right-2 flex flex-wrap gap-1 justify-center z-10 vote-tags-container">${voteTagsHtml}</div></div>`;
+        }
+        
+        function attachHostEventListeners() {
+            document.querySelectorAll('.copy-btn').forEach(btn => btn.addEventListener('click', e => copyToClipboard(e.currentTarget.dataset.link)));
+            const hostJoinBtn = document.getElementById('host-join-btn');
+            if (hostJoinBtn) hostJoinBtn.addEventListener('click', joinAsHost);
+            const resolveBtn = document.getElementById('resolve-btn');
+            if(resolveBtn) resolveBtn.addEventListener('click', resolveQuestion);
+            const nextPlayerBtn = document.getElementById('next-player-btn');
+            if(nextPlayerBtn) nextPlayerBtn.addEventListener('click', nextPlayer);
+            const setTimeBtn = document.getElementById('set-time-btn');
+            if (setTimeBtn) setTimeBtn.addEventListener('click', setRoundTime);
+            const startRoundBtn = document.getElementById('start-round-btn');
+            if(startRoundBtn) startRoundBtn.addEventListener('click', () => updateGameState('QUESTIONS'));
+            const startVotingBtn = document.getElementById('start-voting-btn');
+            if(startVotingBtn) startVotingBtn.addEventListener('click', () => updateGameState('VOTING'));
+            const closeVotingBtn = document.getElementById('close-voting-btn');
+            if(closeVotingBtn) closeVotingBtn.addEventListener('click', closeVoting);
+            document.querySelectorAll('.save-vdo-btn').forEach(btn => btn.addEventListener('click', e => setVdoNinjaLink(e.currentTarget.dataset.playerId)));
+            document.querySelectorAll('.adjust-heart-btn').forEach(btn => btn.addEventListener('click', e => manuallyAdjustHeart(e.currentTarget.dataset.playerId, parseInt(e.currentTarget.dataset.amount))));
+        }
+
+        function attachPlayerEventListeners() {
+            document.querySelectorAll('.vote-btn').forEach(btn => btn.addEventListener('click', e => castVote(e.currentTarget.dataset.playerId)));
+        }
+        
+        function setupTimer(endTime, elementId = 'timer-display', alarmPlayed = false) {
+            if (timerInterval) clearInterval(timerInterval);
+            const timerElement = document.getElementById(elementId);
+            if (!timerElement) return;
+
+            const update = async () => {
+                const remaining = Math.max(0, Math.floor((new Date(endTime) - Date.now()) / 1000));
+                const minutes = Math.floor(remaining / 60).toString().padStart(2, '0');
+                const seconds = (remaining % 60).toString().padStart(2, '0');
+                timerElement.textContent = `${minutes}:${seconds}`;
+                if (remaining <= 0 && !alarmPlayed) {
+                    clearInterval(timerInterval);
+                    const gameData = await getFreshGameState();
+                    if (gameData && !gameData.timerAlarmPlayed) {
+                        sounds.timerEnd();
+                        document.body.classList.add('timer-ended-glow');
+                        setTimeout(() => document.body.classList.remove('timer-ended-glow'), 2500);
+                        gameData.timerAlarmPlayed = true;
+                        await updateGameStateInDb(gameData);
+                    }
+                }
+            };
+            update();
+            timerInterval = setInterval(update, 1000);
+        }
+
+        // --- Supabase Actions ---
+
+        function selectNextQuestionAndPlayer(gameData, isFirstPlayer = false) {
+            let usedIndices = gameData.usedQuestionIndices || [];
+            if (usedIndices.length >= questions.length) usedIndices = [];
+            let nextIndex;
+            do {
+                nextIndex = Math.floor(Math.random() * questions.length);
+            } while (usedIndices.includes(nextIndex));
+            usedIndices.push(nextIndex);
+            gameData.currentQuestion = questions[nextIndex];
+
+            const activePlayers = Object.values(gameData.players).filter(p => !p.isEliminated && !p.isHost).sort((a, b) => a.joinOrder - b.joinOrder);
+            if (activePlayers.length > 0) {
+                if (isFirstPlayer) {
+                    gameData.currentPlayerTurn = activePlayers[0].id;
+                } else {
+                    const currentIndex = activePlayers.findIndex(p => p.id === gameData.currentPlayerTurn);
+                    const nextPlayerIndex = (currentIndex + 1) % activePlayers.length;
+                    gameData.currentPlayerTurn = activePlayers[nextPlayerIndex].id;
+                }
+            } else {
+                gameData.currentPlayerTurn = null;
+            }
+            gameData.showAnswerInOverlay = false;
+            return gameData;
+        }
+
+        async function generateUniqueLobbyCode() {
+            let code, isUnique = false;
+            const chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZ123456789';
+            while(!isUnique) {
+                code = '';
+                for (let i = 0; i < 5; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+                const { data } = await dbClient.from('games').select('lobby_code').eq('lobby_code', code).single();
+                if (!data) isUnique = true;
+            }
+            return code;
+        }
+
+        async function createNewGame() {
+            if (!isAudioReady) { await Tone.start(); isAudioReady = true; }
+            const newLobbyCode = await generateUniqueLobbyCode();
+            const initialGameState = {
+                hostId: currentUser.id, gameState: 'LOBBY', 
+                settings: { roundTime: 300 },
+                players: {}, votes: {}, voteResults: {}, 
+                roundEndTime: null, currentQuestion: null, 
+                usedQuestionIndices: [], currentPlayerTurn: null, 
+                showAnswerInOverlay: false, timerAlarmPlayed: false
+            };
+            const { error } = await dbClient.from('games').insert({ lobby_code: newLobbyCode, game_data: initialGameState });
+            if (error) { renderErrorPage("Fehler", "Konnte kein neues Spiel erstellen."); return; }
+            window.location.search = `?view=host&game=${newLobbyCode}`;
+        }
+
+        async function joinGame(isHost = false) {
+            if (!isAudioReady) { await Tone.start(); isAudioReady = true; }
+            const nameInput = document.getElementById(isHost ? 'host-name-input' : 'player-name-input');
+            const playerName = nameInput.value.trim();
+            if (!playerName) { alert("Bitte gib einen Namen ein."); return; }
+            const gameData = await getFreshGameState();
+            if (!gameData) return;
+            gameData.players[currentUser.id] = {
+                id: currentUser.id, name: playerName, 
+                hearts: isHost ? null : 3, 
+                isHost: isHost,
+                isEliminated: false, lastAnswerCorrect: null, 
+                joinOrder: Object.keys(gameData.players).length,
+                vdoNinjaLink: ''
+            };
+            await updateGameStateInDb(gameData);
+        }
+        
+        async function joinAsHost() {
+            await joinGame(true);
+        }
+
+        async function updateGameState(newState) {
+            let gameData = await getFreshGameState();
+            if (!gameData) return;
+            gameData.gameState = newState;
+            if (newState === 'QUESTIONS') {
+                gameData.roundEndTime = new Date(Date.now() + (gameData.settings.roundTime || 300) * 1000).toISOString();
+                gameData.votes = {};
+                gameData.voteResults = {};
+                gameData.timerAlarmPlayed = false;
+                gameData = selectNextQuestionAndPlayer(gameData, true);
+            }
+            await updateGameStateInDb(gameData);
+        }
+        
+        async function resolveQuestion() {
+            const gameData = await getFreshGameState();
+            if (!gameData || !gameData.currentPlayerTurn) return;
+            gameData.showAnswerInOverlay = true;
+            await updateGameStateInDb(gameData);
+        }
+
+        async function nextPlayer() {
+            let gameData = await getFreshGameState();
+            if (!gameData || !gameData.currentPlayerTurn) return;
+            gameData = selectNextQuestionAndPlayer(gameData, false);
+            await updateGameStateInDb(gameData);
+        }
+
+        async function setVdoNinjaLink(playerId) {
+            const input = document.getElementById(`vdo-link-${playerId}`);
+            if(!input) return;
+            const link = input.value.trim();
+            const gameData = await getFreshGameState();
+            if (!gameData || !gameData.players[playerId]) return;
+            gameData.players[playerId].vdoNinjaLink = link;
+            await updateGameStateInDb(gameData);
+            alert(`VDO.Ninja Link für ${gameData.players[playerId].name} gespeichert!`);
+        }
+
+        async function manuallyAdjustHeart(playerId, amount) {
+            const gameData = await getFreshGameState();
+            if (!gameData || !gameData.players[playerId] || gameData.players[playerId].isHost) return;
+            const player = gameData.players[playerId];
+            player.hearts = Math.max(0, Math.min(3, player.hearts + amount));
+            player.isEliminated = player.hearts <= 0;
+            await updateGameStateInDb(gameData);
+        }
+
+        async function closeVoting() {
+            const gameData = await getFreshGameState();
+            if (!gameData) return;
+            const votes = gameData.votes || {};
+            const voteCounts = {};
+            const voteResults = {};
+            for (const voterId in votes) {
+                const votedForId = votes[voterId];
+                voteCounts[votedForId] = (voteCounts[votedForId] || 0) + 1;
+                if(!voteResults[votedForId]) voteResults[votedForId] = [];
+                voteResults[votedForId].push(voterId);
+            }
+            let maxVotes = 0;
+            Object.values(voteCounts).forEach(count => { if (count > maxVotes) maxVotes = count; });
+            if (maxVotes > 0) {
+                const playersToPunish = Object.keys(voteCounts).filter(id => voteCounts[id] === maxVotes);
+                playersToPunish.forEach(playerId => {
+                    if (gameData.players[playerId] && !gameData.players[playerId].isHost) {
+                        gameData.players[playerId].hearts -= 1;
+                        if (gameData.players[playerId].hearts <= 0) {
+                            gameData.players[playerId].isEliminated = true;
+                        }
+                    }
+                });
+            }
+            gameData.gameState = 'RESULTS';
+            gameData.voteResults = voteResults;
+            await updateGameStateInDb(gameData);
+        }
+
+        async function setRoundTime() {
+            const minutes = parseInt(document.getElementById('round-time-min').value) || 0;
+            const seconds = parseInt(document.getElementById('round-time-sec').value) || 0;
+            const totalSeconds = (minutes * 60) + seconds;
+            const gameData = await getFreshGameState();
+            if (!gameData) return;
+            gameData.settings.roundTime = totalSeconds;
+            await updateGameStateInDb(gameData);
+        }
+
+        async function castVote(votedForPlayerId) {
+            const gameData = await getFreshGameState();
+            if (!gameData) return;
+            if(!gameData.votes) gameData.votes = {};
+            gameData.votes[currentUser.id] = votedForPlayerId;
+            await updateGameStateInDb(gameData);
+        }
+
+        function copyToClipboard(text) {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'absolute';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            try {
+                document.execCommand('copy');
+                alert("Link in die Zwischenablage kopiert!");
+            } catch(err) {
+                alert("Kopieren fehlgeschlagen.");
+            }
+            document.body.removeChild(ta);
+        }
+
+        if (!SUPABASE_URL.startsWith('https://')) {
+            renderErrorPage("Konfiguration fehlt", "Bitte trage deine Supabase URL und deinen Anon Key im Skript-Teil dieser HTML-Datei ein.");
+        } else {
+            initializeAppLogic();
+        }
+    </script>
+</body>
+</html>
