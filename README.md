@@ -1,72 +1,127 @@
-<div id="top" class="">
 
-<div align="center" class="text-center">
-<h1>DERD-MMSTEFLIEGT</h1>
-<p><em>Ignite Fun, Engage Minds, Elevate Playfulness Instantly</em></p>
 
-<img alt="last-commit" src="https://img.shields.io/github/last-commit/timnwk/derd-mmstefliegt?style=flat&amp;logo=git&amp;logoColor=white&amp;color=0080ff" class="inline-block mx-1" style="margin: 0px 2px;">
-<img alt="repo-top-language" src="https://img.shields.io/github/languages/top/timnwk/derd-mmstefliegt?style=flat&amp;color=0080ff" class="inline-block mx-1" style="margin: 0px 2px;">
-<img alt="repo-language-count" src="https://img.shields.io/github/languages/count/timnwk/derd-mmstefliegt?style=flat&amp;color=0080ff" class="inline-block mx-1" style="margin: 0px 2px;">
-<p><em>Built with the tools and technologies:</em></p>
-<img alt="Markdown" src="https://img.shields.io/badge/Markdown-000000.svg?style=flat&amp;logo=Markdown&amp;logoColor=white" class="inline-block mx-1" style="margin: 0px 2px;">
-</div>
-<br>
-<hr>
-<h2>Table of Contents</h2>
-<ul class="list-disc pl-4 my-0">
-<li class="my-0"><a href="#overview">Overview</a></li>
-<li class="my-0"><a href="#getting-started">Getting Started</a>
-<ul class="list-disc pl-4 my-0">
-<li class="my-0"><a href="#prerequisites">Prerequisites</a></li>
-<li class="my-0"><a href="#installation">Installation</a></li>
-<li class="my-0"><a href="#usage">Usage</a></li>
-<li class="my-0"><a href="#testing">Testing</a></li>
-</ul>
-</li>
-</ul>
-<hr>
-<h2>Overview</h2>
-<p>derd-mmstefliegt is a developer-centric tool designed to streamline the creation of interactive, real-time browser games. It combines modern web technologies to deliver engaging user experiences with ease.</p>
-<p><strong>Why derd-mmstefliegt?</strong></p>
-<p>This project aims to simplify the development of quiz-based entertainment platforms. The core features include:</p>
-<ul class="list-disc pl-4 my-0">
-<li class="my-0">🧩 <strong>🎨 Custom Styling:</strong> Utilizes Tailwind CSS and custom fonts for a sleek, responsive UI.</li>
-<li class="my-0">🔊 <strong>🎵 Sound Effects:</strong> Integrates Tone.js for immersive audio feedback.</li>
-<li class="my-0">🌐 <strong>🛠 Backend Integration:</strong> Connects seamlessly with Supabase for real-time data management and interactions.</li>
-<li class="my-0">⚡ <strong>🚀 Performance:</strong> Optimized for smooth gameplay and quick responsiveness.</li>
-<li class="my-0">🧑&zwj;💻 <strong>Modular Architecture:</strong> Designed for scalability and easy customization.</li>
-</ul>
-<hr>
-<h2>Getting Started</h2>
-<h3>Prerequisites</h3>
-<p>This project requires the following dependencies:</p>
-<ul class="list-disc pl-4 my-0">
-<li class="my-0"><strong>Programming Language:</strong> HTML</li>
-</ul>
-<h3>Installation</h3>
-<p>Build derd-mmstefliegt from the source and install dependencies:</p>
-<ol>
-<li class="my-0">
-<p><strong>Clone the repository:</strong></p>
-<pre><code class="language-sh">❯ git clone https://github.com/timnwk/derd-mmstefliegt
-</code></pre>
-</li>
-<li class="my-0">
-<p><strong>Navigate to the project directory:</strong></p>
-<pre><code class="language-sh">❯ cd derd-mmstefliegt
-</code></pre>
-</li>
-<li class="my-0">
-<p><strong>Install the dependencies:</strong></p>
-</li>
-</ol>
-<p>echo 'INSERT-INSTALL-COMMAND-HERE'</p>
-<h3>Usage</h3>
-<p>Run the project with:</p>
-<p>echo 'INSERT-RUN-COMMAND-HERE'</p>
-<h3>Testing</h3>
-<p>Derd-mmstefliegt uses the {<strong>test_framework</strong>} test framework. Run the test suite with:</p>
-<p>echo 'INSERT-TEST-COMMAND-HERE'</p>
-<hr>
-<div align="left" class=""><a href="#top">⬆ Return</a></div>
-<hr></div>
+---
+
+# 🛫 Der Dümmste Fliegt
+
+**Ein interaktives Multiplayer-Quizspiel für Livestreams mit OBS-Overlay, Supabase & VDO.Ninja.**
+
+![Logo](logo.svg)
+
+---
+
+## 📦 Projektüberblick
+
+Dieses Projekt ist ein browserbasiertes Spiel, das in Livestreams eingebunden werden kann. Es ermöglicht dir:
+
+* Eine Lobby für Mitspieler zu erstellen
+* Fragenrunden zu moderieren
+* Zuschauer im Stream abstimmen zu lassen
+* Kamerabilder der Mitspieler (per VDO.Ninja) im OBS-Overlay einzublenden
+
+---
+
+## 🚀 Live-Demo
+
+> Öffne die `index.html` lokal oder hoste sie auf einem Webserver.
+> **Supabase-Anbindung ist erforderlich** für die Spiel-Logik und Synchronisation.
+
+---
+
+## 🧰 Verwendete Technologien
+
+* **HTML + TailwindCSS**: UI-Styling
+* **Tone.js**: Soundeffekte
+* **Supabase**: Auth, Realtime-Database & Hosting
+* **VDO.Ninja**: Kamera-Streams für das Overlay
+* **Vanilla JavaScript**: Spiellogik, Routing, Zustandssynchronisation
+
+---
+
+## 📂 Projektstruktur
+
+```
+index.html            - Hauptdatei (Frontend + Logik)
+logo.svg              - Logo des Spiels
+Supabase              - Realtime Backend (nicht im Repo enthalten)
+```
+
+---
+
+## 🛠 Setup
+
+### 🔑 Supabase einrichten
+
+1. Projekt auf [supabase.com](https://supabase.com) anlegen
+
+2. Tabelle `games` mit Feldern:
+
+   * `id` (UUID, PK)
+   * `lobby_code` (text, unique)
+   * `game_data` (jsonb)
+
+3. Aktiviere **Anonymous Auth** unter Auth > Settings > Provider
+
+4. Füge deine Supabase-URL und den `anon`-Key in der `index.html` ein:
+
+```js
+const SUPABASE_URL = 'https://...supabase.co';
+const SUPABASE_ANON_KEY = 'eyJh...';
+```
+
+---
+
+## ▶️ Anwendung starten
+
+1. Öffne `index.html` im Browser
+2. Klicke auf **"Neue Lobby erstellen"**
+3. Teile den generierten Spieler-Link
+4. Binde den OBS-Overlay-Link im Stream ein (z. B. als Browserquelle)
+
+---
+
+## 🎥 Kameraintegration (VDO.Ninja)
+
+1. Erstelle einen Gruppenraum unter [https://vdo.ninja](https://vdo.ninja)
+2. Sende deinen Spielern den Einladungslink
+3. Kopiere für jeden Spieler den **Solo-Link**
+4. Füge diesen Link im Host-Dashboard beim entsprechenden Spieler ein
+
+⚠️ **Wichtig**: Verwende **immer** den individuellen Solo-Link, *nicht* den allgemeinen Raumlink!
+
+---
+
+## 🧪 Spielregeln
+
+* Jeder Spieler hat 3 Leben (Herzen)
+* In jeder Runde muss ein Spieler eine Quizfrage beantworten
+* Zuschauer stimmen nach jeder Runde ab, wer rausfliegen soll
+* Bei den meisten Stimmen verliert ein Spieler ein Herz
+* Spieler mit 0 Herzen scheiden aus
+* Der letzte verbleibende Spieler gewinnt
+
+---
+
+## 🔐 Sicherheit
+
+* Nutzt **anonyme Authentifizierung** – keine Registrierung notwendig
+* Alle Spielzustände werden in Supabase gespeichert
+* Jeder Lobby-Code ist eindeutig und 5-stellig
+
+---
+
+## ❓FAQ
+
+**Q: Kann ich das Spiel öffentlich hosten?**
+A: Ja, du kannst `index.html` z. B. auf GitHub Pages oder Vercel bereitstellen.
+
+**Q: Wie viele Spieler werden unterstützt?**
+A: Es gibt keine harte Begrenzung, aber empfohlen werden max. 10–12 wegen des Overlays.
+
+---
+
+## 📄 Lizenz
+
+MIT License – feel free to use, modify and share.
+
+---
